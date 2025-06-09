@@ -1,0 +1,26 @@
+{
+    "email":  {
+        "smtp_server": "smtp.exmail.qq.com",
+        "smtp_port": 465,
+        "from": "xxx@qq.com",
+        "password": "",
+        "to": "xxx@qq.com"
+    },
+    "llm": {
+        "model_type": "ollama",
+        "openai_model_name": "gpt-4o-mini",
+        "ollama_model_name": "qwen3:14b",
+        "ollama_api_url": "http://localhost:11434/api/chat"
+    },
+    "services": [
+        "correction"
+    ],
+    "slack": {
+        "webhook_url": "your_slack_webhook_url"
+    },
+    "embedding": {
+        "embedding_type": "huggingface",
+        "embedding_model_name": "BAAI/bge-m3",
+        "device": "cpu"
+    }
+}
