@@ -3,6 +3,9 @@ from typing import Dict, List
 import fitz  # PyMuPDF
 import pandas as pd
 from datetime import datetime
+import camelot
+import pytesseract
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +20,13 @@ class ParsingService:
     - 文本和表格混合解析
     """
 
-    def parse_pdf(self, text: str, method: str, metadata: dict, page_map: list = None) -> dict:
+    def parse_pdf(self, text: str, method: str, metadata: dict, page_map: list = None, temp_path: str = None) -> dict:
         """
         使用指定方法解析PDF文档
 
         参数:
             text (str): PDF文档的文本内容
-            method (str): 解析方法 ('all_text', 'by_pages', 'by_titles', 或 'text_and_tables')
+            method (str): 解析方法 ('all_text', 'by_pages', 'by_titles', 'text_and_tables'或 'tables_and_images')
             metadata (dict): 文档元数据，包括文件名和其他属性
             page_map (list): 包含每页内容和元数据的字典列表
 
@@ -48,6 +51,12 @@ class ParsingService:
                 parsed_content = self._parse_by_titles(page_map)
             elif method == "text_and_tables":
                 parsed_content = self._parse_text_and_tables(page_map)
+            elif method == "tables_and_images":
+                file_path = temp_path
+                if not file_path:
+                    raise ValueError("file_path is required for tables_and_images parsing.")
+                # 先提取表格，再提取图片文本
+                parsed_content = self._parse_tables(file_path) + self._parse_images(file_path)
             else:
                 raise ValueError(f"Unsupported parsing method: {method}")
                 
@@ -179,3 +188,42 @@ class ParsingService:
                     "page": page["page"]
                 })
         return parsed_content 
+
+    def _parse_tables(self, file_path: str) -> list:
+        """
+        使用 camelot 提取 PDF 中的表格并转换为 Markdown
+        """
+        tables = camelot.read_pdf(file_path, pages="all")
+        parsed = []
+        for idx, table in enumerate(tables):
+            md = table.df.to_markdown(index=False)
+            parsed.append({
+                "type": "table",
+                "content": md,
+                "table_index": idx
+            })
+        return parsed
+
+    def _parse_images(self, file_path: str) -> list:
+        """
+        使用 PyMuPDF 提取图片并通过 pytesseract OCR 转换为文本
+        """
+        doc = fitz.open(file_path)
+        parsed = []
+        for page_index in range(len(doc)):
+            for img in doc.get_page_images(page_index):
+                xref = img[0]
+                pix = fitz.Pixmap(doc, xref)
+                if pix.n < 5:
+                    img_data = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                else:
+                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                    img_data = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                text = pytesseract.image_to_string(img_data)
+                parsed.append({
+                    "type": "image_text",
+                    "content": text,
+                    "page": page_index + 1,
+                    "xref": xref
+                })
+        return parsed

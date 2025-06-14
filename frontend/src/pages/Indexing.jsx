@@ -74,8 +74,7 @@ const Indexing = () => {
         const providersData = await providersResponse.json();
         // 确保 Chroma 在providers列表中
         const allProviders = [
-          ...providersData.providers,
-          { id: 'chroma', name: 'Chroma' }
+          ...providersData.providers
         ];
         setProviders(allProviders);
 

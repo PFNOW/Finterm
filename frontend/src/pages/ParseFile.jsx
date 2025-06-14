@@ -10,6 +10,22 @@ const ParseFile = () => {
   const [status, setStatus] = useState('');
   const [docName, setDocName] = useState('');
   const [isProcessed, setIsProcessed] = useState(false);
+  const [embeddingModel, setEmbeddingModel] = useState('text-embedding-3-large');
+  const modelOptions = {
+    openai: [
+      { value: 'text-embedding-3-large', label: 'text-embedding-3-large' },
+      { value: 'text-embedding-3-small', label: 'text-embedding-3-small' }
+    ],
+    bedrock: [
+      { value: 'cohere.embed-english-v3', label: 'cohere.embed-english-v3' },
+      { value: 'cohere.embed-multilingual-v3', label: 'cohere.embed-multilingual-v3' }
+    ],
+    huggingface: [
+      { value: 'sentence-transformers/all-mpnet-base-v2', label: 'all-mpnet-base-v2' },
+      { value: 'all-MiniLM-L6-v2', label: 'all-MiniLM-L6-v2' },
+      { value: 'google-bert/bert-base-uncased', label: 'bert-base-uncased' }
+    ]
+  };
 
   const handleProcess = async () => {
     if (!file || !loadingMethod || !parsingOption) {
@@ -64,7 +80,7 @@ const ParseFile = () => {
         <div className="col-span-3 space-y-4">
           <div className="p-4 border rounded-lg bg-white shadow-sm">
             <div>
-              <label className="block text-sm font-medium mb-1">Upload PDF</label>
+              <label className="block text-sm font-medium mb-1">Upload File</label>
               <input
                 type="file"
                 accept=".pdf"
@@ -99,6 +115,7 @@ const ParseFile = () => {
                 <option value="by_pages">By Pages</option>
                 <option value="by_titles">By Titles</option>
                 <option value="text_and_tables">Text and Tables</option>
+                <option value="tables_and_images">Text, Tables and Images</option>
               </select>
             </div>
 

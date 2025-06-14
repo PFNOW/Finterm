@@ -1,6 +1,9 @@
 from datetime import datetime
 import logging
+import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import numpy as np
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -13,18 +16,20 @@ class ChunkingService:
     - fixed_size: 按固定大小分块
     - by_paragraphs: 按段落分块
     - by_sentences: 按句子分块
+    - semantic: 按语义相似性分块
     """
     
-    def chunk_text(self, text: str, method: str, metadata: dict, page_map: list = None, chunk_size: int = 1000) -> dict:
+    def chunk_text(self, text: str, method: str, metadata: dict, page_map: list = None, chunk_size: int = 1000, similarity_threshold: float = 0.8) -> dict:
         """
         将文本按指定方法分块
         
         Args:
             text: 原始文本内容
-            method: 分块方法，支持 'by_pages', 'fixed_size', 'by_paragraphs', 'by_sentences'
+            method: 分块方法，支持 'by_pages', 'fixed_size', 'by_paragraphs', 'by_sentences', 'semantic'
             metadata: 文档元数据
             page_map: 页面映射列表，每个元素包含页码和页面文本
             chunk_size: 固定大小分块时的块大小
+            similarity_threshold: 语义分块时的相似度阈值（0-1）
             
         Returns:
             包含分块结果的文档数据结构
@@ -33,11 +38,11 @@ class ChunkingService:
             ValueError: 当分块方法不支持或页面映射为空时
         """
         try:
-            if not page_map:
+            if method != "semantic" and not page_map:
                 raise ValueError("Page map is required for chunking.")
             
             chunks = []
-            total_pages = len(page_map)
+            total_pages = len(page_map) if page_map else 0
             
             if method == "by_pages":
                 # 直接使用 page_map 中的每页作为一个 chunk
@@ -85,10 +90,24 @@ class ChunkingService:
                             "content": chunk["text"],
                             "metadata": chunk_metadata
                         })
+            elif method == "semantic":
+                # 按语义相似性分块
+                semantic_chunks = self._semantic_chunks(text, similarity_threshold)
+                for chunk in semantic_chunks:
+                    chunk_metadata = {
+                        "chunk_id": len(chunks) + 1,
+                        "page_number": None,
+                        "page_range": "",
+                        "word_count": len(chunk["text"].split())
+                    }
+                    chunks.append({
+                        "content": chunk["text"],
+                        "metadata": chunk_metadata
+                    })
             else:
                 raise ValueError(f"Unsupported chunking method: {method}")
-
-            # 创建标准化的文档数据结构
+                        
+            # 构建标准化文档数据结构
             document_data = {
                 "filename": metadata.get("filename", ""),
                 "total_chunks": len(chunks),
@@ -98,9 +117,8 @@ class ChunkingService:
                 "timestamp": datetime.now().isoformat(),
                 "chunks": chunks
             }
-            
             return document_data
-            
+
         except Exception as e:
             logger.error(f"Error in chunk_text: {str(e)}")
             raise
@@ -165,3 +183,48 @@ class ChunkingService:
         )
         texts = splitter.split_text(text)
         return [{"text": t} for t in texts]
+
+    def _semantic_chunks(self, text: str, threshold: float) -> list[dict]:
+        """
+        将文本按语义相似性分块
+
+        Args:
+            text: 要分块的文本
+            threshold: 相邻句子相似度阈值
+
+        Returns:
+            按语义相似度合并的文本块列表
+        """
+        # 先按句子分块
+        sentence_dicts = self._sentence_chunks(text)
+        texts = [sd["text"] for sd in sentence_dicts]
+        if not texts:
+            return []
+        # 计算句子嵌入
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL"))
+        response = client.embeddings.create(
+            input=texts,
+            model="text-embedding-3-small"
+        )
+        embeddings = [i.embedding for i in response.data]
+        # 按相邻句子相似度合并
+        chunks = []
+        current = [texts[0]]
+        for i in range(1, len(texts)):
+            sim = self._cosine_similarity(embeddings[i], embeddings[i-1])
+            if sim >= threshold:
+                current.append(texts[i])
+            else:
+                chunks.append({"text": " ".join(current)})
+                current = [texts[i]]
+        if current:
+            chunks.append({"text": " ".join(current)})
+        return chunks
+
+    def _cosine_similarity(self, a: list[float], b: list[float]) -> float:
+        """
+        计算两个向量的余弦相似度
+        """
+        arr1 = np.array(a)
+        arr2 = np.array(b)
+        return float(np.dot(arr1, arr2) / (np.linalg.norm(arr1) * np.linalg.norm(arr2)))

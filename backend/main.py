@@ -57,9 +57,10 @@ CHROMA_CONFIG = {
 @app.post("/process")
 async def process_file(
     file: UploadFile = File(...),
-    loading_method: str = Form(...),
+    loading_method: Optional[str] = Form(None),
     chunking_option: str = Form(...),
-    chunk_size: int = Form(1000)
+    chunk_size: int = Form(1000),
+    similarity_threshold: float = Form(0.8)
 ):
     try:
         # 保存上传的文件
@@ -67,6 +68,23 @@ async def process_file(
         with open(temp_path, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
+        
+        # 根据文件后缀自动推断加载方法
+        ext = os.path.splitext(file.filename)[1].lower()
+        method_map = {
+            '.txt': 'text',
+            '.md': 'markdown',
+            '.markdown': 'markdown',
+            '.docx': 'word',
+            '.xlsx': 'excel',
+            '.xls': 'excel',
+            '.csv': 'csv',
+            '.pptx': 'ppt',
+            '.ppt': 'ppt',
+        }
+        if not loading_method or loading_method not in method_map.values():
+            # 默认回退到PDF简单提取
+            loading_method = method_map.get(ext, loading_method or 'pypdf')
         
         # 准备元数据
         metadata = {
@@ -89,7 +107,8 @@ async def process_file(
             chunking_option, 
             metadata,
             page_map=page_map,
-            chunk_size=chunk_size
+            chunk_size=chunk_size,
+            similarity_threshold=similarity_threshold
         )
         
         # 清理临时文件
@@ -595,7 +614,35 @@ async def parse_file(
             raw_text, 
             parsing_option, 
             metadata,
-            page_map=page_map
+            page_map=page_map,
+            temp_path=temp_path
+        )
+
+        # 转换成标准化的chunks格式
+        chunks = []
+        for idx, page in enumerate(page_map, 1):
+            chunk_metadata = {
+                "chunk_id": idx,
+                "page_number": page["page"],
+                "page_range": str(page["page"]),
+                "word_count": len(page["text"].split())
+            }
+            if "metadata" in page:
+                chunk_metadata.update(page["metadata"])
+            
+            chunks.append({
+                "content": page["text"],
+                "metadata": chunk_metadata
+            })
+
+         # 使用 LoadingService 保存文档，传递strategy参数
+        filepath = loading_service.save_document(
+            filename=file.filename,
+            chunks=chunks,
+            metadata=metadata,
+            loading_method=loading_method,
+            strategy=parsing_option,
+            chunking_strategy="basic",
         )
         
         # Clean up temp file
@@ -609,7 +656,7 @@ async def parse_file(
 @app.post("/load")
 async def load_file(
     file: UploadFile = File(...),
-    loading_method: str = Form(...),
+    loading_method: Optional[str] = Form(None),
     strategy: str = Form(None),
     chunking_strategy: str = Form(None),
     chunking_options: str = Form(None)
@@ -621,14 +668,30 @@ async def load_file(
             content = await file.read()
             buffer.write(content)
         
+        # 根据文件后缀自动推断加载方法
+        ext = os.path.splitext(file.filename)[1].lower()
+        method_map = {
+            '.txt': 'text',
+            '.md': 'markdown',
+            '.markdown': 'markdown',
+            '.docx': 'word',
+            '.xlsx': 'excel',
+            '.xls': 'excel',
+            '.csv': 'csv',
+            '.pptx': 'ppt',
+            '.ppt': 'ppt',
+        }
+        if not loading_method or loading_method not in method_map.values():
+            loading_method = method_map.get(ext, loading_method or 'pypdf')
+        
         # 准备元数据
         metadata = {
             "filename": file.filename,
-            "total_chunks": 0,  # 将在后面更新
-            "total_pages": 0,   # 将在后面更新
+            "total_chunks": 0,
+            "total_pages": 0, 
             "loading_method": loading_method,
-            "loading_strategy": strategy,  
-            "chunking_strategy": chunking_strategy, 
+            "loading_strategy": strategy,
+            "chunking_strategy": chunking_strategy,
             "timestamp": datetime.now().isoformat()
         }
         
@@ -696,6 +759,8 @@ async def chunk_document(data: dict = Body(...)):
         doc_id = data.get("doc_id")
         chunking_option = data.get("chunking_option")
         chunk_size = data.get("chunk_size", 1000)
+        similarity_threshold = data.get("similarity_threshold", 0.8)
+        logger.info(f"Chunking document with option: {chunking_option}, size: {chunk_size}, threshold: {similarity_threshold}")
         
         if not doc_id or not chunking_option:
             raise HTTPException(
@@ -728,12 +793,17 @@ async def chunk_document(data: dict = Body(...)):
         }
             
         chunking_service = ChunkingService()
+        # 支持 semantic 分块：使用完整文本和相似度阈值
+        full_text = ""
+        if chunking_option == "semantic":
+            full_text = "\n".join([page["text"] for page in page_map])
         result = chunking_service.chunk_text(
-            text="",  # 不需要传递文本，因为我们使用 page_map
+            text=full_text,  # 不需要传递文本，因为我们使用 page_map
             method=chunking_option,
             metadata=metadata,
             page_map=page_map,
-            chunk_size=chunk_size
+            chunk_size=chunk_size,
+            similarity_threshold=similarity_threshold
         )
         
         # 生成输出文件名

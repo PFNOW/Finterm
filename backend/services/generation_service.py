@@ -117,7 +117,8 @@ class GenerationService:
         model_name: str,
         query: str,
         context: str,
-        api_key: Optional[str] = None
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None
     ) -> str:
         """
         使用OpenAI API生成回答
@@ -127,7 +128,8 @@ class GenerationService:
             query: 用户查询
             context: 上下文信息
             api_key: OpenAI API密钥，如不提供则从环境变量获取
-            
+            base_url: OpenAI API基础URL，如不提供则使用默认值
+
         返回:
             生成的回答文本
         """
@@ -136,8 +138,10 @@ class GenerationService:
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
                     raise ValueError("OpenAI API key not provided")
+            if not api_key:
+                base_url = os.getenv("OPENAI_BASE_URL")
                     
-            client = OpenAI(api_key=api_key)
+            client = OpenAI(api_key=api_key, base_url=base_url)
             
             messages = [
                 {"role": "system", "content": "You are a helpful assistant. Use the provided context to answer the question."},

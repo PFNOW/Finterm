@@ -236,10 +236,10 @@ const LoadFile = () => {
         <div className="col-span-3 space-y-4">
           <div className="p-4 border rounded-lg bg-white shadow-sm">
             <div>
-              <label className="block text-sm font-medium mb-1">Upload PDF</label>
+              <label className="block text-sm font-medium mb-1">Upload File</label>
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,.csv,.txt,.md,.docx,.xls,.xlsx,.pptx,.ppt"
                 onChange={(e) => setFile(e.target.files[0])}
                 className="block w-full border rounded px-3 py-2"
               />
@@ -255,6 +255,12 @@ const LoadFile = () => {
                 <option value="pymupdf">PyMuPDF</option>
                 <option value="pypdf">PyPDF</option>
                 <option value="unstructured">Unstructured</option>
+                <option value="text">Text</option>
+                <option value="markdown">Markdown</option>
+                <option value="word">Word</option>
+                <option value="excel">Excel</option>
+                <option value="csv">CSV</option>
+                <option value="ppt">PPT</option>
               </select>
             </div>
 

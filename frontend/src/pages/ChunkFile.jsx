@@ -7,6 +7,7 @@ const ChunkFile = () => {
   const [selectedDoc, setSelectedDoc] = useState('');
   const [chunkingOption, setChunkingOption] = useState('by_pages');
   const [chunkSize, setChunkSize] = useState(1000);
+  const [similarityThreshold, setSimilarityThreshold] = useState(0.8);
   const [chunks, setChunks] = useState(null);
   const [status, setStatus] = useState('');
   const [activeTab, setActiveTab] = useState('chunks');
@@ -89,6 +90,7 @@ const ChunkFile = () => {
           doc_id: docId,
           chunking_option: chunkingOption,
           chunk_size: chunkSize,
+          similarity_threshold: similarityThreshold,
         }),
       });
 
@@ -296,6 +298,7 @@ const ChunkFile = () => {
                 <option value="fixed_size">Fixed Size</option>
                 <option value="by_paragraphs">By Paragraphs</option>
                 <option value="by_sentences">By Sentences</option>
+                <option value="semantic">Semantic</option>
               </select>
             </div>
 
@@ -309,6 +312,21 @@ const ChunkFile = () => {
                   className="block w-full p-2 border rounded"
                   min="100"
                   max="5000"
+                />
+              </div>
+            )}
+
+            {chunkingOption === 'semantic' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Similarity Threshold</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="1"
+                  value={similarityThreshold}
+                  onChange={(e) => setSimilarityThreshold(Number(e.target.value))}
+                  className="block w-full p-2 border rounded"
                 />
               </div>
             )}
